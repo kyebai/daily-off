@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" style="background-color: #0f172a !important; color-scheme: dark;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <title>The Office</title>
+    
+    <!-- CRITICAL INLINE STYLES -->
+    <style>
+        html, body { 
+            background-color: #0f172a !important; 
+            color: #ffffff;
+            margin: 0; 
+            padding: 0; 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            font-family: system-ui, -apple-system, sans-serif; 
+            color-scheme: dark; 
+        }
+        #deck { flex: 1; position: relative; overflow: hidden; }
+        .slide { display: none; background: black; color: white; position: absolute; top: 0; left: 0; right: 0; bottom: 0; padding: 40px; box-sizing: border-box; overflow-y: auto; padding-bottom: 120px; }
+        .slide.active { display: block; }
+        .content-box { background: white; color: black; padding: 20px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #bf9000; font-size: 1rem; }
+        .speaker-name { color: #bf9000; font-weight: bold; }
+        .gold-header { color: #bf9000; font-weight: bold; border-bottom: 2px solid #bf9000; font-size: 1.75rem; margin-bottom: 20px; }
+        @media (min-width: 768px) {
+            .content-box { font-size: 1.25rem; }
+            .gold-header { font-size: 2.5rem; }
+        }
+        .fixed-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 80px; display: flex; justify-content: center; align-items: center; gap: 16px; background: #0f172a; border-top: 2px solid #bf9000; z-index: 100; }
+        
+        /* Instant Loading Overlay */
+        #loader {
+            position: fixed;
+            inset: 0;
+            background-color: #0f172a !important;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            padding-top: 18vh;
+            z-index: 9999;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+        .gold-cross-icon {
+            width: 80px;
+            height: 110px;
+            fill: #bf9000;
+            margin-bottom: 24px;
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.6; transform: scale(0.98); }
+            50% { opacity: 1; transform: scale(1.02); }
+        }
+    </style>
+
+    <script src="https://cdn.tailwindcss.com" defer></script>
+</head>
+<body style="background-color: #0f172a !important;">
+    <!-- Instant Loading Screen with Simple Gold Cross -->
+    <div id="loader" style="background-color: #0f172a !important;">
+        <svg class="gold-cross-icon" viewBox="0 0 100 140" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 40,0 L 60,0 L 60,35 L 95,35 L 95,55 L 60,55 L 60,140 L 40,140 L 40,55 L 5,55 L 5,35 L 40,35 Z" />
+        </svg>
+        <div id="loader-text" style="font-size: 1.25rem; font-weight: bold; color: #bf9000; letter-spacing: 0.05em;">Loading...</div>
+    </div>
+
+    <div id="deck"></div>
+    <div id="footer-nav" class="fixed-nav">
+        <button id="pray-btn" onclick="propagateNamesAndStart()" style="display: none; background: #bf9000; color: white; padding: 15px 40px; border-radius: 5px; font-weight: bold;">Pray</button>
+        
+        <div id="nav-controls" style="display: none; gap: 16px;">
+            <button onclick="changeSlide(-1)" style="background: #bf9000; color: white; padding: 10px 20px; border-radius: 5px;">Previous</button>
+            <button onclick="changeSlide(1)" style="background: #bf9000; color: white; padding: 10px 20px; border-radius: 5px;">Next</button>
+        </div>
+    </div>
+    <script>
+        const SLIDE_ORDER = ["opening", "confession", "psalm", "lessonintro", "lesson2", "lesson3", "intercessions", "creed", "maranatha"];
+        let currentSlide = 0;
+        let speakerNames = ["Saint 1", "Saint 2", "Saint 3"];
+        const PERMANENT = {
+            "opening": { title: "Opening (Psalm 24:10)", lines: ["[S1]: Who is the King of Glory?", "[S2]: The Lord of hosts, He is the King of Glory.", "[S3]: Let us pray for a holy and peaceful evening."] },
+            "confession": { title: "Confession", lines: ["[S1]: Lord Jesus Christ, have mercy upon us,", "[S2]: forgive us our sins, and by the power of your Holy Spirit raise us up", "[S3]: To serve you in newness of life, to the glory of your Name."] },
+            "lessonintro": { title: "Lessons", lines: ["[S1]: Give us ears to hear your Words.", "[S2]: Give us soft hearts to be shaped by them.", "[S3]: Give us hands and mouths to be their imager."] },
+            "intercessions": { title: "Intercessions", lines: ["[S1]: We pray for our church, our homes, and all whom you've given us.", "*Pause for personal prayer*", "[S3]: Lord, in your mercy, hear our prayer."] },
+            "maranatha": { title: "The Maranatha Sending", lines: ["[S1]: Surely He is coming soon. Amen. Come, Lord Jesus!", "[S2]: The Spirit and the Bride say, Come. And let the one who hears say, Come.", "[S3]: The grace of the Lord Jesus be with all the saints. Amen."] }
+        };
+        const DAILY_CONTENT = {"metadata":{"rotation":[1,0,2]},"psalm":{"title":"Psalm","lines":["[R2]: Silence is praise to you, Zion-dwelling God, And also obedience.  You hear the prayer in it all.","[R1]: We all arrive at your doorstep sooner or later, loaded with guilt, Our sins too much for us— but you get rid of them once and for all.","[R3]: Blessed are the chosen!  Blessed the guest at home in your place!  We expect our fill of good things in your house, your heavenly manse.","[R2]: All your salvation wonders are on display in your trophy room.  Earth-Tamer, Ocean-Pourer, Mountain-Maker, Hill-Dresser, Muzzler of sea storm and wave crash, of mobs in noisy riot— Far and wide they’ll come to a stop, they’ll stare in awe, in wonder.","[R1]: Dawn and dusk take turns calling, “Come and worship.”  Oh, visit the earth, ask her to join the dance!","[R3]: Deck her out in spring showers, fill the God-River with living water.  Paint the wheat fields golden.","[R2]: Creation was made for this!  Drench the plowed fields, soak the dirt clods With rainfall as harrow and rake bring her to blossom and fruit.","[R1]: Snow-crown the peaks with splendor, scatter rose petals down your paths, All through the wild meadows, rose petals.","[R3]: Set the hills to dancing, Dress the canyon walls with live sheep, a drape of flax across the valleys.","[R2]: Let them shout, and shout, and shout!  Oh, oh, let them sing!  All together now—applause for God!","[R1]: Sing songs to the tune of his glory, set glory to the rhythms of his praise.  Say of God, “We’ve never seen anything like him!”","[R3]: When your enemies see you in action, they slink off like scolded dogs.  The whole earth falls to its knees— it worships you, sings to you, can’t stop enjoying your name and fame.","[R2]: Take a good look at God’s wonders— they’ll take your breath away.  He converted sea to dry land;","[R1]: travelers crossed the river on foot.  Now isn’t that cause for a song?  Ever sovereign in his high tower, he keeps his eye on the godless nations.","[R3]: Rebels don’t dare raise a finger against him.  Bless our God, O peoples!  Give him a thunderous welcome!","[R2]: Didn’t he set us on the road to life?  Didn’t he keep us out of the ditch?  He trained us first, passed us like silver through refining fires, Brought us into hardscrabble country, pushed us to our very limit, Road-tested us inside and out, took us to hell and back;","[R1]: Finally he brought us to this well-watered place.  I’m bringing my prizes and presents to your house.","[R3]: I’m doing what I said I’d do, What I solemnly swore I’d do that day when I was in so much trouble: The choicest cuts of meat for the sacrificial meal;","[R2]: Even the fragrance of roasted lamb is like a meal!  Or make it an ox garnished with goat meat!","[R1]: All believers, come here and listen, let me tell you what God did for me.  I called out to him with my mouth, my tongue shaped the sounds of music.","[R3]: If I had been cozy with evil, the Lord would never have listened.  But he most surely did listen, he came on the double when he heard my prayer.","[R2]: Blessed be God: he didn’t turn a deaf ear, he stayed with me, loyal in his love.","[R1]: God, mark us with grace and blessing!  Smile!  The whole country will see how you work, all the godless nations see how you save.","[R3]: God!  Let people thank and enjoy you.  Let all people thank and enjoy you.  Let all far-flung people become happy and shout their happiness because You judge them fair and square, you tend the far-flung peoples.","[R2]: God!  Let people thank and enjoy you.  Let all people thank and enjoy you.  Earth, display your exuberance!","[R1]: You mark us with blessing, O God, our God.  You mark us with blessing, O God.  Earth’s four corners—honor him! — PSA 65"]},"lesson3":{"title":"Gospel","lines":["[R2]: Six days later, three of them saw that glory.  Jesus took Peter and the brothers, James and John, and led them up a high mountain.","[R1]: His appearance changed from the inside out, right before their eyes.  Sunlight poured from his face.","[R3]: His clothes were filled with light.  Then they realized that Moses and Elijah were also there in deep conversation with him.","[R2]: Peter broke in, “Master, this is a great moment!  What would you think if I built three memorials here on the mountain—one for you, one for Moses, one for Elijah?”","[R1]: While he was going on like this, babbling, a light-radiant cloud enveloped them, and sounding from deep in the cloud a voice: “This is my Son, marked by my love, focus of my delight.","[R3]: Listen to him.”  When the disciples heard it, they fell flat on their faces, scared to death.","[R2]: But Jesus came over and touched them.  “Don’t be afraid.”  When they opened their eyes and looked around all they saw was Jesus, only Jesus.","[R1]: Coming down the mountain, Jesus swore them to secrecy.  “Don’t breathe a word of what you’ve seen.","[R3]: After the Son of Man is raised from the dead, you are free to talk.”  The disciples, meanwhile, were asking questions.","[R2]: “Why do the religion scholars say that Elijah has to come first?”  Jesus answered, “Elijah does come and get everything ready.","[R1]: I’m telling you, Elijah has already come but they didn’t know him when they saw him.","[R3]: They treated him like dirt, the same way they are about to treat the Son of Man.”","[R2]: That’s when the disciples realized that all along he had been talking about John the Baptizer.","[R1]: At the bottom of the mountain, they were met by a crowd of waiting people.  As they approached, a man came out of the crowd and fell to his knees begging, “Master, have mercy on my son.","[R3]: He goes out of his mind and suffers terribly, falling into seizures.  Frequently he is pitched into the fire, other times into the river.","[R2]: I brought him to your disciples, but they could do nothing for him.”  Jesus said, “What a generation!","[R1]: No sense of God!  No focus to your lives!  How many times do I have to go over these things?","[R3]: How much longer do I have to put up with this?  Bring the boy here.”  He ordered the afflicting demon out—and it was out, gone.","[R2]: From that moment on the boy was well.  When the disciples had Jesus off to themselves, they asked, “Why couldn’t we throw it out?”","[R1]: “Because you’re not yet taking God seriously,” said Jesus.  “The simple truth is that if you had a mere kernel of faith, a poppy seed, say, you would tell this mountain, ‘Move!’","[R3]: and it would move.  There is nothing you wouldn’t be able to tackle.”  As they were regrouping in Galilee, Jesus told them, “The Son of Man is about to be betrayed to some people who want nothing to do with God.","[R2]: They will murder him—and three days later he will be raised alive.”  The disciples felt scared to death. — MAT 17"]},"creed":{"title":"Affirmation of Faith","lines":["[S1]: We live in gratitude that our King came down from heaven for our salvation.","[S2]: The Holy Spirit empowered his incarnation by the Virgin Mary to become a man.","[S3]: For us he was crucified under Pontius Pilate, he suffered death and was buried..."]}};
+
+        function formatLine(line, globalLineIndex) {
+            const hasSpeakerTag = line.startsWith("[R") || line.startsWith("[S");
+            if (!hasSpeakerTag) return line;
+            
+            const rot = DAILY_CONTENT.metadata.rotation;
+            let speakerIndex;
+            
+            if (line.startsWith("[S")) {
+                const sIndex = parseInt(line.charAt(2)) - 1;
+                speakerIndex = rot[sIndex];
+            } else {
+                speakerIndex = rot[globalLineIndex % 3];
+            }
+            
+            const name = speakerNames[speakerIndex];
+            let cleanLine = line;
+            const parts = line.split("]: ");
+            if (parts.length > 1) {
+                cleanLine = parts.slice(1).join("]: ");
+            }
+            return '<span class="speaker-name">' + name + '</span>: ' + cleanLine;
+        }
+
+        function propagateNamesAndStart() {
+            speakerNames[0] = document.getElementById('s1').value;
+            speakerNames[1] = document.getElementById('s2').value;
+            speakerNames[2] = document.getElementById('s3').value;
+            
+            currentSlide = 1;
+            renderDeck();
+        }
+
+        function changeSlide(direction) {
+            const allSlides = document.querySelectorAll('.slide');
+            currentSlide = Math.max(0, Math.min(allSlides.length - 1, currentSlide + direction));
+            renderDeck();
+        }
+
+        function renderDeck() {
+            const deck = document.getElementById('deck');
+            const prayBtn = document.getElementById('pray-btn');
+            const navControls = document.getElementById('nav-controls');
+            deck.innerHTML = '';
+
+            if (currentSlide === 0) {
+                prayBtn.style.display = 'block';
+                navControls.style.display = 'none';
+            } else {
+                prayBtn.style.display = 'none';
+                navControls.style.display = 'flex';
+            }
+
+            const welcome = document.createElement('div');
+            welcome.className = 'slide ' + (currentSlide === 0 ? 'active' : '');
+            welcome.innerHTML = '<h1 class="gold-header">Welcome</h1>' +
+                '<div style="display: flex; flex-direction: column; gap: 16px; max-width: 42rem;">' +
+                    '<input type="text" id="s1" class="content-box" value="' + speakerNames[0] + '">' +
+                    '<input type="text" id="s2" class="content-box" value="' + speakerNames[1] + '">' +
+                    '<input type="text" id="s3" class="content-box" value="' + speakerNames[2] + '">' +
+                '</div>';
+            deck.appendChild(welcome);
+
+            SLIDE_ORDER.forEach(key => {
+                let globalLineCounter = 0;
+                const data = PERMANENT[key] || DAILY_CONTENT[key];
+                if (!data) return;
+                
+                const items = Array.isArray(data) ? data : [data];
+                items.forEach(item => {
+                    if (!item.lines || item.lines.length === 0) return;
+                    
+                    for (let i = 0; i < item.lines.length; i += 3) {
+                        const slide = document.createElement('div');
+                        slide.className = 'slide';
+                        
+                        slide.innerHTML = '<h1 class="gold-header">' + item.title + '</h1>' +
+                            item.lines.slice(i, i + 3).map((line) => {
+                                const lineContent = '<div class="content-box">' + formatLine(line, globalLineCounter) + '</div>';
+                                globalLineCounter++;
+                                return lineContent;
+                            }).join('');
+                        deck.appendChild(slide);
+                    }
+                });
+            });
+
+            const allSlides = document.querySelectorAll('.slide');
+            if (allSlides.length > 0) {
+                currentSlide = Math.min(currentSlide, allSlides.length - 1);
+                allSlides[currentSlide].classList.add('active');
+            }
+        }
+
+        function dismissLoader() {
+            const loader = document.getElementById('loader');
+            if (loader) {
+                loader.style.opacity = '0';
+                loader.style.visibility = 'hidden';
+            }
+        }
+        
+        document.addEventListener("DOMContentLoaded", function() {
+            const startTime = Date.now();
+            try {
+                const options = { year: 'numeric', month: 'long', day: 'numeric' };
+                const todayFormatted = new Date().toLocaleDateString('en-US', options);
+                const loaderText = document.getElementById('loader-text');
+                if (loaderText) {
+                    loaderText.innerText = 'Loading ' + todayFormatted + '...';
+                }
+                
+                renderDeck();
+            } catch(e) {
+                console.error("Render failed: ", e);
+            }
+
+            const elapsedTime = Date.now() - startTime;
+            const remainingTime = Math.max(0, 1500 - elapsedTime);
+            setTimeout(dismissLoader, remainingTime);
+        });
+    </script>
+</body>
+</html>
